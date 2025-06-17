@@ -133,3 +133,48 @@ double Kohonen::euclideanDistance(const std::vector<double>& input, const std::v
   }
   return std::sqrt(sum);
 }
+
+
+
+double Kohonen::neighborhoodFunction(double distance, double sigma) const {
+  return std::exp(-distance * distance / (2 * sigma * sigma));
+}
+
+void Kohonen::updateWeights(const std::vector<double>& input, std::tuple<int, int, int> bmu, double learningRate, double sigma) {
+  int bmuX = std::get<0>(bmu), bmuY = std::get<1>(bmu), bmuZ = std::get<2>(bmu);
+  for (int i = 0; i < gridX_; i++) {
+    for (int j = 0; j < gridY_; j++) {
+      for (int k = 0; k < gridZ_; k++) {
+        double distance = std::sqrt(std::pow(i - bmuX, 2) + std::pow(j - bmuY, 2) + std::pow(k - bmuZ, 2));
+        if (distance <= sigma) {
+          double influence = neighborhoodFunction(distance, sigma);
+          for (int l = 0; l < inputSize_; l++) {
+            weights_[i][j][k][l] += learningRate * influence * (input[l] - weights_[i][j][k][l]);
+          }
+        }
+      }
+    }
+  }
+}
+
+void Kohonen::train() {
+  std::cout << "Training with " << trainingData_.size() << " images\n";
+  if (trainingData_.empty()) {
+    std::cerr << "Error: No training data loaded" << std::endl;
+    return;
+  }
+  
+  for (int epoch = 0; epoch < epochs_; epoch++) {
+    double learningRate = initialLearningRate_ * std::exp(-epoch / static_cast<double>(epochs_));
+    double sigma = initialSigma_ * std::exp(-epoch / static_cast<double>(epochs_));
+    
+    for (const auto& image : trainingData_) {
+      auto bmu = findBestMatchingUnit(image.pixels);
+      updateWeights(image.pixels, bmu, learningRate, sigma);
+    }
+    double percentage = ((epoch + 1) * 100.0) / epochs_;
+    std::cout << "Estamos en la época " << (epoch + 1) << " de " << epochs_ 
+    << " con " << trainingData_.size() << " datos (" << percentage << "% completado)" << std::endl;
+    std::cout.flush();
+  }
+}
