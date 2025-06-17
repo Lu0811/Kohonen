@@ -289,3 +289,38 @@ void Kohonen::saveWeightsForVisualization(const std::string& outputFile) const {
   outFile.close();
   std::cout << "Weights and labels saved to " << outputFile << " for 3D visualization" << std::endl;
 }
+
+
+
+bool Kohonen::validateData(const std::string& filename) const {
+  std::ifstream file(filename);
+  if (!file.is_open()) {
+    std::cerr << "Error: Could not open file " << filename << std::endl;
+    return false;
+  }
+  
+  std::string line;
+  getline(file, line); // Ignorar encabezado
+  int validLines = 0;
+  
+  while (getline(file, line)) {
+    std::stringstream ss(line);
+    std::string token;
+    int pixelCount = 0;
+    
+    while (getline(ss, token, ',') && pixelCount < inputSize_) {
+      try {
+        std::stod(token);
+        pixelCount++;
+      } catch (const std::exception& e) {
+        std::cerr << "Error: Invalid data in line" << std::endl;
+        file.close();
+        return false;
+      }
+    }
+    if (pixelCount == inputSize_ + 1) validLines++;
+  }
+  file.close();
+  std::cout << "Validated " << validLines << " images from " << filename << std::endl;
+  return true;
+}
