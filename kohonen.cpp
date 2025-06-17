@@ -178,3 +178,114 @@ void Kohonen::train() {
     std::cout.flush();
   }
 }
+
+
+
+void Kohonen::trainWithBatches(int batchSize) {
+  std::cout << "Training with " << trainingData_.size() << " images in batches of " << batchSize << "\n";
+  if (trainingData_.empty()) {
+    std::cerr << "Error: No training data loaded" << std::endl;
+    return;
+  }
+  
+  for (int epoch = 0; epoch < epochs_; epoch++) {
+    double learningRate = initialLearningRate_ * std::exp(-epoch / static_cast<double>(epochs_));
+    double sigma = initialSigma_ * std::exp(-epoch / static_cast<double>(epochs_));
+    
+    for (size_t i = 0; i < trainingData_.size(); i += batchSize) {
+      size_t end = std::min(i + batchSize, trainingData_.size());
+      for (size_t j = i; j < end; j++) {
+        auto bmu = findBestMatchingUnit(trainingData_[j].pixels);
+        updateWeights(trainingData_[j].pixels, bmu, learningRate, sigma);
+      }
+      double epochPercentage = ((epoch + 1) * 100.0) / epochs_;
+      double batchPercentage = ((i / static_cast<double>(batchSize) + 1) * 100.0) / (trainingData_.size() / batchSize);
+      double totalPercentage = epochPercentage + (batchPercentage / epochs_);
+      std::cout << "Estamos en la época " << (epoch + 1) << " de " << epochs_ 
+      << " con " << trainingData_.size() << " datos (batch " << (i / batchSize + 1) 
+      << " de " << (trainingData_.size() / batchSize) << ", " << totalPercentage << "% completado)" << std::endl;
+      std::cout.flush();
+    }
+  }
+}
+
+void Kohonen::saveWeightsForVisualization(const std::string& outputFile) const {
+  std::ofstream outFile(outputFile);
+  if (!outFile.is_open()) {
+    std::cerr << "Error: Could not open output file " << outputFile << std::endl;
+    return;
+  }
+  
+  // Asignar etiquetas a neuronas usando los datos de entrenamiento
+  std::vector<std::vector<std::vector<int>>> neuronLabels(gridX_, std::vector<std::vector<int>>(gridY_, std::vector<int>(gridZ_, -1)));
+  std::vector<std::vector<std::vector<int>>> labelCounts(gridX_, std::vector<std::vector<int>>(gridY_, std::vector<int>(gridZ_, 0)));
+  std::ifstream trainFile("fashion-mnist_train.csv");
+  std::string line;
+  
+  if (trainFile.is_open()) {
+    getline(trainFile, line); // Ignorar encabezado
+    while (getline(trainFile, line)) {
+      std::stringstream ss(line);
+      std::string token;
+      int label;
+      std::vector<double> pixels(inputSize_);
+      getline(ss, token, ',');
+      label = std::stoi(token);
+      for (int i = 0; i < inputSize_; i++) {
+        getline(ss, token, ',');
+        pixels[i] = std::stod(token) / 255.0;
+      }
+      auto bmu = findBestMatchingUnit(pixels);
+      int bmuX = std::get<0>(bmu), bmuY = std::get<1>(bmu), bmuZ = std::get<2>(bmu);
+      neuronLabels[bmuX][bmuY][bmuZ] = label;
+      labelCounts[bmuX][bmuY][bmuZ]++;
+    }
+    trainFile.close();
+  }
+  
+  // Resolver conflictos con mayoría de votos (simplificado para 3D)
+  for (int i = 0; i < gridX_; i++) {
+    for (int j = 0; j < gridY_; j++) {
+      for (int k = 0; k < gridZ_; k++) {
+        if (labelCounts[i][j][k] > 0) {
+          std::map<int, int> voteCount;
+          for (int x = 0; x < gridX_; x++) {
+            for (int y = 0; y < gridY_; y++) {
+              for (int z = 0; z < gridZ_; z++) {
+                if (neuronLabels[x][y][z] != -1) {
+                  double dist = std::sqrt(std::pow(i - x, 2) + std::pow(j - y, 2) + std::pow(k - z, 2));
+                  if (dist < 1.0) {
+                    voteCount[neuronLabels[x][y][z]]++;
+                  }
+                }
+              }
+            }
+          }
+          int maxVote = -1, maxCount = 0;
+          for (const auto& pair : voteCount) {
+            if (pair.second > maxCount) {
+              maxVote = pair.first;
+              maxCount = pair.second;
+            }
+          }
+          neuronLabels[i][j][k] = maxVote;
+        }
+      }
+    }
+  }
+  
+  // Guardar coordenadas y etiquetas con z derivado de pesos
+  for (int i = 0; i < gridX_; i++) {
+    for (int j = 0; j < gridY_; j++) {
+      for (int k = 0; k < gridZ_; k++) {
+        double z = std::accumulate(weights_[i][j][k].begin(), weights_[i][j][k].end(), 0.0) / inputSize_;
+        outFile << i << "," << j << "," << k << "," << neuronLabels[i][j][k] << ",";
+        for (int l = 0; l < inputSize_; l++) {
+          outFile << weights_[i][j][k][l] << (l < inputSize_ - 1 ? "," : "\n");
+        }
+      }
+    }
+  }
+  outFile.close();
+  std::cout << "Weights and labels saved to " << outputFile << " for 3D visualization" << std::endl;
+}
