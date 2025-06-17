@@ -84,3 +84,52 @@ bool Kohonen::loadData(const std::string& filename) {
     std::cout << "Loaded " << trainingData_.size() << " images with labels from " << filename << std::endl;
     return true;
 }
+
+
+
+void Kohonen::initializeWeights() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<> dis(0.0, 1.0);
+  
+  for (int i = 0; i < gridX_; i++) {
+    for (int j = 0; j < gridY_; j++) {
+      for (int k = 0; k < gridZ_; k++) {
+        for (int l = 0; l < inputSize_; l++) {
+          weights_[i][j][k][l] = dis(gen);
+        }
+      }
+    }
+  }
+}
+
+std::tuple<int, int, int> Kohonen::findBestMatchingUnit(const std::vector<double>& input) const {
+  if (input.size() != static_cast<size_t>(inputSize_)) {
+    throw std::runtime_error("Input size mismatch");
+  }
+  
+  double minDist = std::numeric_limits<double>::max();
+  std::tuple<int, int, int> bmu(-1, -1, -1);
+  
+  for (int i = 0; i < gridX_; i++) {
+    for (int j = 0; j < gridY_; j++) {
+      for (int k = 0; k < gridZ_; k++) {
+        double dist = euclideanDistance(input, weights_[i][j][k]);
+        if (dist < minDist) {
+          minDist = dist;
+          bmu = {i, j, k};
+        }
+      }
+    }
+  }
+  return bmu;
+}
+
+double Kohonen::euclideanDistance(const std::vector<double>& input, const std::vector<double>& weight) const {
+  double sum = 0.0;
+  for (size_t i = 0; i < input.size(); i++) {
+    double diff = input[i] - weight[i];
+    sum += diff * diff;
+  }
+  return std::sqrt(sum);
+}
